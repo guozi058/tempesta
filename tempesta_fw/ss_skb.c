@@ -667,8 +667,8 @@ static int
 __skb_fragment(struct sk_buff *skb, struct sk_buff *pskb,
 	       char *pspt, int len, TfwStr *it)
 {
-	int ret;
-	unsigned int i, d_size, offset;
+	int ret, offset;
+	unsigned int i, d_size;
 	struct sk_buff *f_skb;
 
 	SS_DBG("[%d]: %s: in: len [%d] pspt [%p], skb [%p]: head [%p]"
@@ -779,6 +779,8 @@ ss_skb_cutoff_data(const TfwStr *hdr, int skip, int tail)
 	int r;
 	TfwStr it;
 	const TfwStr *c, *end;
+
+	BUG_ON(skip >= hdr->len);
 
 	TFW_STR_FOR_EACH_CHUNK(c, hdr, end) {
 		if (c->len <= skip) {
