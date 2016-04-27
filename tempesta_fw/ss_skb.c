@@ -107,30 +107,59 @@ ss_skb_frag_len(skb_frag_t *frag)
 static skb_frag_t *
 __check_frag_room(struct sk_buff *skb, skb_frag_t *frag, int len)
 {
-	int i, sz, sz2, refcnt;
+	int i, refcnt;
+	int pg_used, pg_size, pg_room, pg_room2;
+	skb_frag_t *f, *ret = frag;
 	struct page *pg = skb_frag_page(frag);
-	skb_frag_t *frag2, *ret = frag;
 
-	if ((refcnt = page_count(pg)) == 1)
+	refcnt = page_count(pg);
+
+	/* XXX: @refcnt may decrease but it can't increase. */
+	/* XXX: refcnt == 1 - @pg is definitely NOT used by an allocator. */
+	if (refcnt == 1)
 		return frag; /* no other users */
 
-	sz = PAGE_SIZE - ss_skb_frag_len(frag);
+	/* XXX: Make sure that @pg is not used by an allocator. */
+	if (refcnt & 0x7f000000)
+		return NULL;
+	/*
+	 * pg_room is actuall pg_tailroom. There's also pg_headroom
+	 * which is actually frag->page_offset. It can also be used
+	 * for data placement provided is has enough room. This is
+	 * especially prudent as fragments may be allocated starting
+	 * from the end of a page, or starting from the start of
+	 * a page. So the room may exist in either or both places.
+	 */
+
+	pg_used = ss_skb_frag_len(frag);
+	pg_size = PAGE_SIZE << get_order(pg_used);
+	pg_room = pg_size - pg_used;
+
 	for (i = skb_shinfo(skb)->nr_frags - 1; i >= 0 ; --i) {
-		frag2 = &skb_shinfo(skb)->frags[i];
-		if (frag2 == frag || pg != skb_frag_page(frag2))
+		f = &skb_shinfo(skb)->frags[i];
+		if ((f == frag) || (skb_frag_page(f) != pg))
 			continue;
-		sz2 = PAGE_SIZE - ss_skb_frag_len(frag2);
-		if (sz2 < len)
-			return NULL;
-		if (sz2 < sz) {
-			sz = sz2;
-			ret = frag2;
+		pg_used = ss_skb_frag_len(f);
+		pg_room2 = pg_size - pg_used;
+		if (pg_room2 < 0) {
+			pg_size = PAGE_SIZE << get_order(pg_used);
+			pg_room = pg_room2 = pg_size - pg_used;
+		}
+		if (pg_room2 < pg_room) {
+			pg_room = pg_room2;
+			ret = f;
 		}
 		/* Return localy referenced pages only. */
-		if (--refcnt == 1)
+		/* XXX: Check @refcnt first as that is lightweight. */
+		/*
+		 * XXX: For @pg is the same page where skb and skb->head
+		 * are located @refcnt == 3 is the same as @refcnt == 1.
+		 * That's because the initial refcnt of that page is 2.
+		 */
+		if ((len <= pg_room)
+		    && ((--refcnt == 1) || (page_count(pg) == 1)))
 			return ret;
 	}
-
 	/* The page is used outside of this SKB. */
 	return NULL;
 }
@@ -149,12 +178,13 @@ __lookup_pgfrag_room(struct sk_buff *skb, int len)
 	 * utilize memory limits better.
 	 */
 	for (i = skb_shinfo(skb)->nr_frags - 1; i >= 0; --i) {
-		skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
-		if ((int)PAGE_SIZE - ss_skb_frag_len(frag) < len)
+		skb_frag_t *f = &skb_shinfo(skb)->frags[i];
+		int pg_used = ss_skb_frag_len(f);
+		int pg_size = PAGE_SIZE << get_order(pg_used);
+		if (pg_size - pg_used < len)
 			continue;
-		frag = __check_frag_room(skb, frag, len);
-		if (frag)
-			return frag;
+		if ((f = __check_frag_room(skb, f, len)))
+			return f;
 	}
 
 	return NULL;
