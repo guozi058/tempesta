@@ -303,8 +303,12 @@ __split_linear_data(struct sk_buff *skb, char *pspt, int len, TfwStr *it)
 	 * case, tail_len can never be zero.
 	 */
 	if (unlikely(!tail_len && len <= ss_skb_tailroom(skb))) {
+
+		it->data = ss_skb_put(skb, len);
+
 		BUG_ON(len < 0);
-		it->ptr = ss_skb_put(skb, len);
+		it->data = ss_skb_put(skb, len);
+
 		return 0;
 	}
 	/*
@@ -315,7 +319,7 @@ __split_linear_data(struct sk_buff *skb, char *pspt, int len, TfwStr *it)
 	if (unlikely((len < 0) && (tail_len == -len))) {
 		ss_skb_put(skb, len);
 		if (skb_is_nonlinear(skb))
-			it->ptr = skb_frag_address(&skb_shinfo(skb)->frags[0]);
+			it->data = skb_frag_address(&skb_shinfo(skb)->frags[0]);
 		return 0;
 	}
 
@@ -367,7 +371,7 @@ __split_linear_data(struct sk_buff *skb, char *pspt, int len, TfwStr *it)
 		skb_frag_ref(skb, alloc);	/* get_page(page); */
 	}
 
-	it->ptr = skb_frag_address(&skb_shinfo(skb)->frags[0]);
+	it->data = skb_frag_address(&skb_shinfo(skb)->frags[0]);
 	return 0;
 }
 
@@ -412,7 +416,7 @@ __split_pgfrag_add(struct sk_buff *skb, int i, int off, int len, TfwStr *it)
 			off = skb_frag_size(frag_dst);
 			skb_frag_size_add(frag_dst, len);
 			ss_skb_adjust_data_len(skb, len);
-			it->ptr = (char *)skb_frag_address(frag_dst) + off;
+			it->data = (char *)skb_frag_address(frag_dst) + off;
 			return 0;
 		}
 	}
@@ -430,7 +434,7 @@ __split_pgfrag_add(struct sk_buff *skb, int i, int off, int len, TfwStr *it)
 
 	/* If @off is zero, the job is done in __new_pgfrag(). */
 	if (!off) {
-		it->ptr = skb_frag_address(frag);
+		it->data = skb_frag_address(frag);
 		return 0;
 	}
 
@@ -468,7 +472,7 @@ __split_pgfrag_add(struct sk_buff *skb, int i, int off, int len, TfwStr *it)
 	/* Get the SKB and the address for new data. */
 	it->flags = !(i < MAX_SKB_FRAGS - 1);
 	frag_dst = it->flags ? &skb_shinfo(it->skb)->frags[0] : frag + 1;
-	it->ptr = skb_frag_address(frag_dst);
+	it->data = skb_frag_address(frag_dst);
 
 	return 0;
 }
@@ -513,7 +517,7 @@ __split_pgfrag_del(struct sk_buff *skb, int i, int off, int len, TfwStr *it)
 		frag->page_offset += len;
 		skb_frag_size_sub(frag, len);
 		ss_skb_adjust_data_len(skb, -len);
-		it->ptr = skb_frag_address(frag);
+		it->data = skb_frag_address(frag);
 		return 0;
 	}
 	/* Fast path: delete the tail part of a fragment. */
@@ -560,13 +564,13 @@ __split_pgfrag_del(struct sk_buff *skb, int i, int off, int len, TfwStr *it)
 
 	/* Get the SKB and the address of data after the deleted area. */
 	it->flags = (skb != skb_dst);
-	it->ptr = skb_frag_address(&skb_shinfo(skb_dst)->frags[i]);
+	it->data = skb_frag_address(&skb_shinfo(skb_dst)->frags[i]);
 	return 0;
 
 lookup_next_ptr:
 	/* Get the next fragment after the deleted fragment. */
 	if (i < si->nr_frags)
-		it->ptr = skb_frag_address(&si->frags[i]);
+		it->data = skb_frag_address(&si->frags[i]);
 	return 0;
 }
 
@@ -675,7 +679,7 @@ done:
 	SS_DBG("[%d]: %s: out: res [%p], skb [%p]: head [%p] data [%p]"
 		" tail [%p] end [%p] len [%u] data_len [%u]"
 		" truesize [%u] nr_frags [%u]\n",
-		smp_processor_id(), __func__, it->ptr, skb, skb->head,
+		smp_processor_id(), __func__, it->data, skb, skb->head,
 		skb->data, skb_tail_pointer(skb), skb_end_pointer(skb),
 		skb->len, skb->data_len, skb->truesize,
 		skb_shinfo(skb)->nr_frags);
@@ -704,11 +708,11 @@ done:
 	 * is located either in the next fragment or in the next SKB.
 	 * Otherwise, it's definitely in one of the SKB fragments.
 	 */
-	if (it->ptr == NULL) {
+	if (it->data == NULL) {
 		BUG_ON(it->skb);
 		it->skb = *next_fdp ? : ss_skb_next(pskb ? : skb);
-		it->ptr = ss_skb_data_address(it->skb);
-		if (it->ptr == NULL)
+		it->data = ss_skb_data_address(it->skb);
+		if (it->data == NULL)
 			return -EFAULT;
 	} else if (it->flags == 0) {
 		it->skb = skb;
@@ -757,7 +761,7 @@ ss_skb_cutoff_data(const TfwStr *hdr, int skip, int tail)
 		}
 		memset(&it, 0, sizeof(TfwStr));
 		r = __skb_fragment(c->skb, NULL,
-				   (char *)c->ptr + skip, skip - c->len, &it);
+				   (char *)c->data + skip, skip - c->len, &it);
 		if (r < 0)
 			return r;
 		BUG_ON(r != c->len - skip);
@@ -766,7 +770,7 @@ ss_skb_cutoff_data(const TfwStr *hdr, int skip, int tail)
 
 	/* Cut off the tail. */
 	while (tail) {
-		void *f_ptr = it.ptr;
+		void *f_ptr = it.data;
 		struct sk_buff *f_skb = it.skb;
 		BUG_ON(f_ptr == NULL);
 		BUG_ON(f_skb == NULL);

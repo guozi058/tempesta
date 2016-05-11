@@ -74,7 +74,7 @@
 #define TFW_STR_CN_SHIFT	TFW_STR_FBITS
 #define __TFW_STR_CN_MAX	(~TFW_STR_FMASK)
 /* Str is compound from many chunks, use indirect table for the chunks. */
-#define __TFW_STR_COMPOUND 	(~((1U << TFW_STR_FBITS) - 1))
+#define __TFW_STR_COMPOUND	16 	
 /*
  * Str constists from compound or plain strings.
  * Duplicate strings are also always compound on root level.
@@ -99,27 +99,32 @@
  * 		  string and the least significant byte for flags;
  */
 typedef struct {
-	void		*ptr;
 	struct sk_buff	*skb;
 	unsigned long	len;
 	unsigned char	eolen;
-	unsigned int	flags;
+
+	unsigned int	chunknum : 24;
+	unsigned int	flags : 8;
+	union {
+	char *data;
+	struct TfwStr *chunks;
+};
 } TfwStr;
 
-#define DEFINE_TFW_STR(name, val) TfwStr name = { (val), NULL,		\
-						  sizeof(val) - 1, 0 }
-#define TFW_STR_FROM(s)         ((TfwStr){(char*)s, NULL, strlen(s)})
+#define DEFINE_TFW_STR(name, val) TfwStr name = { .data = (char *)(val), .skb =NULL\
+, .len = sizeof(val) - 1, .chunknum = 1, .flags = 0 }
+#define TFW_STR_FROM(s)         ((TfwStr){ .data = (char*)s, .skb =NULL,\
+ strlen(s)})
 
 /* Use this with "%.*s" in printing calls. */
-#define PR_TFW_STR(s)		(int)min(20UL, (s)->len), (char *)(s)->ptr
+#define PR_TFW_STR(s)		(int)min(20UL, (s)->len), (char *)(s)->data
 
 /* Numner of chunks in @s. */
-#define TFW_STR_CHUNKN(s)	((s)->flags >> TFW_STR_CN_SHIFT)
+#define TFW_STR_CHUNKN(s)	((s)->chunknum)
 #define TFW_STR_CHUNKN_LIM(s)	((s)->flags >= __TFW_STR_CN_MAX)
-#define TFW_STR_CHUNKN_ADD(s, n) ((s)->flags += ((n) << TFW_STR_CN_SHIFT))
-#define TFW_STR_CHUNKN_SUB(s, n) ((s)->flags -= ((n) << TFW_STR_CN_SHIFT))
-#define __TFW_STR_CHUNKN_SET(s, n) ((s)->flags = ((s)->flags & TFW_STR_FMASK) \
-						  | ((n) << TFW_STR_CN_SHIFT))
+#define TFW_STR_CHUNKN_ADD(s, n) ((s)->chunknum += (n))
+#define TFW_STR_CHUNKN_SUB(s, n) ((s)->chunknum -= (n))
+#define __TFW_STR_CHUNKN_SET(s, n) ((s)->chunknum = (n))
 /* Compound string contains at least 2 chunks. */
 #define TFW_STR_CHUNKN_INIT(s)	__TFW_STR_CHUNKN_SET(s, 2)
 
@@ -130,8 +135,8 @@ typedef struct {
 #define TFW_STR_DUP(s)		((s)->flags & TFW_STR_DUPLICATE)
 
 /* Get @c'th chunk of @s. */
-#define __TFW_STR_CH(s, c)	((TfwStr *)(s)->ptr + (c))
-#define TFW_STR_CHUNK(s, c)	(((s)->flags & __TFW_STR_COMPOUND)	\
+#define __TFW_STR_CH(s, c)	((TfwStr *)(s)->chunks + (c))
+#define TFW_STR_CHUNK(s, c)	(((s)->chunknum)	\
 				 ? ((c) >= TFW_STR_CHUNKN(s)		\
 				    ? NULL				\
 				    : __TFW_STR_CH(s, (c)))		\
@@ -143,10 +148,10 @@ typedef struct {
 #define TFW_STR_CURR(s)							\
 ({									\
 	typeof(s) _tmp = TFW_STR_DUP(s)					\
-		       ? (TfwStr *)(s)->ptr + TFW_STR_CHUNKN(s) - 1	\
+		       ? (TfwStr *)(s)->chunks + TFW_STR_CHUNKN(s) - 1	\
 		       : (s);						\
 	(_tmp->flags & __TFW_STR_COMPOUND)				\
-		? (TfwStr *)_tmp->ptr + TFW_STR_CHUNKN(_tmp) - 1	\
+		? (TfwStr *)_tmp->chunks + TFW_STR_CHUNKN(_tmp) - 1	\
 		: (_tmp);						\
  })
 #define TFW_STR_LAST(s)		TFW_STR_CURR(s)
@@ -159,16 +164,16 @@ typedef struct {
 		(c) = (s);						\
 		end = (s) + 1;						\
 	} else {							\
-		(c) = (s)->ptr;						\
-		end = (TfwStr *)(s)->ptr + TFW_STR_CHUNKN(s);		\
+		(c) = (TfwStr *)(s)->chunks;						\
+		end = (TfwStr *)(s)->chunks + TFW_STR_CHUNKN(s);		\
 	}								\
 	for ( ; (c) < end; ++(c))
 
 /* The same as above, but for duplicate strings. */
 #define TFW_STR_FOR_EACH_DUP(d, s, end)					\
 	if (TFW_STR_DUP(s)) {						\
-		(end) = (TfwStr *)(s)->ptr + TFW_STR_CHUNKN(s);		\
-		(d) = (s)->ptr;						\
+		(end) = (TfwStr *)(s)->chunks + TFW_STR_CHUNKN(s);		\
+		(d) = (TfwStr *)(s)->chunks;						\
 	} else {							\
 		(d) = (s);						\
 		(end) = (s) + 1;					\
@@ -184,15 +189,15 @@ tfw_str_updlen(TfwStr *s, const char *curr_p)
 	unsigned int n;
 
 	if (s->flags & __TFW_STR_COMPOUND) {
-		TfwStr *chunk = (TfwStr *)s->ptr + TFW_STR_CHUNKN(s) - 1;
+		TfwStr *chunk = (TfwStr *)s->chunks + TFW_STR_CHUNKN(s) - 1;
 
 		BUG_ON(chunk->len);
-		BUG_ON(!chunk->ptr || curr_p <= (char *)chunk->ptr);
+		BUG_ON(!chunk->chunks || curr_p <= (char *)chunk->chunks);
 
-		n = curr_p - (char *)chunk->ptr;
+		n = curr_p - (char *)chunk->chunks;
 		chunk->len = n;
 	} else {
-		n = curr_p - (char *)s->ptr;
+		n = curr_p - (char *)s->data;
 	}
 	s->len += n;
 }

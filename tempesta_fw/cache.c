@@ -133,7 +133,7 @@ static struct {
 static struct task_struct *cache_mgr_thr;
 static DEFINE_PER_CPU(TfwWorkTasklet, cache_wq);
 
-static TfwStr g_crlf = { .ptr = S_CRLF, .len = SLEN(S_CRLF) };
+static TfwStr g_crlf = { .data = S_CRLF, .len = SLEN(S_CRLF) };
 
 /* Iterate over request URI and Host header to process request key. */
 #define TFW_CACHE_REQ_KEYITER(c, req, u_end, h_start, h_end)		\
@@ -141,16 +141,16 @@ static TfwStr g_crlf = { .ptr = S_CRLF, .len = SLEN(S_CRLF) };
 		c = &req->uri_path;					\
 		u_end = &req->uri_path + 1;				\
 	} else {							\
-		c = req->uri_path.ptr;					\
-		u_end = (TfwStr *)req->uri_path.ptr			\
+		c = (TfwStr *)req->uri_path.chunks;			\
+		u_end = (TfwStr *)req->uri_path.chunks			\
 			+ TFW_STR_CHUNKN(&req->uri_path);		\
 	}								\
 	if (TFW_STR_PLAIN(&req->h_tbl->tbl[TFW_HTTP_HDR_HOST])) {	\
 		h_start = req->h_tbl->tbl + TFW_HTTP_HDR_HOST;		\
 		h_end = req->h_tbl->tbl + TFW_HTTP_HDR_HOST + 1;	\
 	} else {							\
-		h_start = req->h_tbl->tbl[TFW_HTTP_HDR_HOST].ptr;	\
-		h_end = (TfwStr *)req->h_tbl->tbl[TFW_HTTP_HDR_HOST].ptr \
+		h_start = (TfwStr *)req->h_tbl->tbl[TFW_HTTP_HDR_HOST].chunks;\
+		h_end = (TfwStr *)req->h_tbl->tbl[TFW_HTTP_HDR_HOST].chunks \
 			+ TFW_STR_CHUNKN(&req->h_tbl->tbl[TFW_HTTP_HDR_HOST]);\
 	}								\
 	for ( ; c != h_end; ++c, c = (c == u_end) ? h_start : c)
@@ -173,7 +173,7 @@ tfw_cache_entry_key_eq(TDB *db, TfwHttpReq *req, TfwCacheEntry *ce)
 			return false;
 this_chunk:
 		n = min(c->len - c_off, (unsigned long)trec->len - t_off);
-		if (strncasecmp((char *)c->ptr + c_off, trec->data + t_off, n))
+		if (strncasecmp((char *)c->data + c_off, trec->data + t_off, n))
 			return false;
 		if (n == c->len - c_off) {
 			c_off = 0;
@@ -284,7 +284,7 @@ tfw_cache_strcpy(char **p, TdbVRec **trec, TfwStr *src, size_t tot_len)
 			 (*trec)->chunk_next, *p, tot_len, room, copied);
 
 		room = min((unsigned long)room, src->len - copied);
-		memcpy(*p, (char *)src->ptr + copied, room);
+		memcpy(*p, (char *)src->data + copied, room);
 		*p += room;
 		copied += room;
 	}
@@ -570,7 +570,7 @@ tfw_cache_write_field(TDB *db, TdbVRec **trec, TfwHttpResp *resp,
 	TfwStr c = { 0 };
 
 	while (1)  {
-		c.ptr = *data;
+		c.data = *data;
 		c.len = min(tr->data + tr->len - *data,
 			    (long)(len - copied));
 		r = tfw_http_msg_add_data(it, (TfwHttpMsg *)resp, hdr, &c);

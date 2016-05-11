@@ -29,11 +29,11 @@ TEST(tfw_strcpy, zero_src)
 {
 	TfwStr s1 = {
 		.len = 0,
-		.ptr = NULL
+		.data = NULL
 	};
 	TfwStr s2 = {
 		.len = 3,
-		.ptr = "abc"
+		.data = "abc"
 	};
 
 	/* @dest->ptr is static memory, but must not crash. */
@@ -45,11 +45,11 @@ TEST(tfw_strcpy, zero_dst)
 {
 	TfwStr s1 = {
 		.len = 0,
-		.ptr = NULL
+		.data = NULL
 	};
 	TfwStr s2 = {
 		.len = 3,
-		.ptr = "abc"
+		.data = "abc"
 	};
 
 	/* @dest->ptr is static memory, but must not crash. */
@@ -61,15 +61,15 @@ TEST(tfw_strcpy, both_plain)
 	char buf1[4] = { 0 }, buf2[4] = "abc";
 	TfwStr s1 = {
 		.len = 4,
-		.ptr = buf1
+		.data = buf1
 	};
 	TfwStr s2 = {
 		.len = 4,
-		.ptr = buf2
+		.data = buf2
 	};
 
 	EXPECT_ZERO(tfw_strcpy(&s1, &s2));
-	EXPECT_STR_EQ(s1.ptr, "abc");
+	EXPECT_STR_EQ(s1.data, "abc");
 }
 
 TEST(tfw_strcpy, src_compound)
@@ -77,12 +77,12 @@ TEST(tfw_strcpy, src_compound)
 	char buf1[32] = { 0 };
 	TfwStr s1 = {
 		.len = 32,
-		.ptr = buf1
+		.data = buf1
 	};
-	TFW_STR(s2, "abcdefghijklmnop");
+	DEFINE_TFW_STR(s2, "abcdefghijklmnop");
 
-	EXPECT_ZERO(tfw_strcpy(&s1, s2));
-	EXPECT_STR_EQ(s1.ptr, "abcdefghijklmnop");
+	EXPECT_ZERO(tfw_strcpy(&s1, &s2));
+	EXPECT_STR_EQ(s1.data, "abcdefghijklmnop");
 }
 
 TEST(tfw_strcpy, dst_compound)
@@ -90,7 +90,7 @@ TEST(tfw_strcpy, dst_compound)
 	char buf[32] = { [0 ... 30] = 'a', 0 };
 	TfwStr s2 = {
 		.len = sizeof("abcdefghijklmnop") - 1,
-		.ptr = "abcdefghijklmnop"
+		.data = "abcdefghijklmnop"
 	};
 	TFW_STR(s1, buf);
 
@@ -101,106 +101,131 @@ TEST(tfw_strcpy, dst_compound)
 
 TEST(tfw_strcpy, both_compound)
 {
-	char buf[32] = { [0 ... 30] = 'a', 0 };
-	TFW_STR(s1, buf);
+	DEFINE_TFW_STR(s1, "abcdefghijklmnop");
+
 	TfwStr s2 = {
-		.ptr = (TfwStr []){
-			{ .ptr = "ab",	.len = 2 },
-			{ .ptr = "cde",	.len = 3 },
-			{ .ptr = "f",	.len = 1 },
-			{ .ptr = "g",	.len = 1 },
-			{ .ptr = "h",	.len = 1 },
-			{ .ptr = "ijklmno", .len = 7 },
-			{ .ptr = "p", .len = 1 }
+		.chunks = (struct TfwStr *)(TfwStr []){
+			{ .data = "ab",	.len = 2 },
+			{ .data = "cde",	.len = 3 },
+			{ .data = "f",	.len = 1 },
+			{ .data = "g",	.len = 1 },
+			{ .data = "h",	.len = 1 },
+			{ .data = "ijklmno", .len = 7 },
+			{ .data = "p", .len = 1 }
 		},
 		.len = sizeof("abcdefghijklmnop") - 1,
-		.flags = 7 << TFW_STR_CN_SHIFT
+		.flags = 0
 	};
 
-	EXPECT_ZERO(tfw_strcpy(s1, &s2));
-	EXPECT_TRUE(tfw_str_eq_cstr(s1, "abcdefghijklmnop",
+	EXPECT_ZERO(tfw_strcpy(&s1, &s2));
+	EXPECT_TRUE(tfw_str_eq_cstr(&s1, "abcdefghijklmnop",
 				    sizeof("abcdefghijklmnop") - 1, 0));
 }
 
 TEST(tfw_strcat, plain)
 {
-	int chunks;
-	TFW_STR(s1, "abcdefghijklmnop");
+	int chunkscnt;
+/*	TfwStr s1 = {
+		.chunks = (struct TfwStr *)(TfwStr []){
+			{ .data = "ab",	.len = 2 },
+			{ .data = "cde",	.len = 3 },
+			{ .data = "f",	.len = 1 },
+			{ .data = "g",	.len = 1 },
+			{ .data = "h",	.len = 1 },
+			{ .data = "ijklmno", .len = 7 },
+			{ .data = "p", .len = 1 }
+		},
+		.len = sizeof("abcdefghijklmnop") - 1,
+		.flags = 0
+	};*/
+	TfwStr s1 = {.data = "abcdefghijklmnop", .len = sizeof("abcdefghijklmnop") - 1,.skb = NULL};
+/*
+	TfwStr s1 = { .chunks = (struct TfwStr *)(TfwStr []){{
+			.data = "abcdefghijklmnop", .len = sizeof("abcdefghijklmnop") - 1,.skb = NULL}},
+		.len = sizeof("abcdefghijklmnop") - 1,
+		.skb = NULL,
+		.flags = 0
+		   };
+*/
 	TfwStr s2 = {
 		.len = sizeof("0123456789") - 1,
-		.ptr = "0123456789"
+		.data = "0123456789"
 	};
 
-	chunks = TFW_STR_CHUNKN(s1);
+	chunkscnt = TFW_STR_CHUNKN(&s1);
+	s1.flags = __TFW_STR_COMPOUND;
 
-	EXPECT_ZERO(tfw_strcat(str_pool, s1, &s2));
-	EXPECT_TRUE(TFW_STR_CHUNKN(s1) == chunks + 1);
-	EXPECT_TRUE(tfw_str_eq_cstr(s1, "abcdefghijklmnop0123456789",
-				    sizeof("abcdefghijklmnop0123456789") - 1,
+	EXPECT_ZERO(tfw_strcat(str_pool, &s1, &s2));
+	TFW_DBG("after cat:%lu;n:%d\n", s1.len, s1.chunknum);
+	EXPECT_TRUE(TFW_STR_CHUNKN(&s1) == chunkscnt + 1);
+	EXPECT_TRUE(tfw_str_eq_cstr(&s1, "0123456789",
+				    sizeof("0123456789") - 1,
 				    0));
 }
 
 TEST(tfw_strcat, compound)
 {
 	int chunks1, chunks2;
-	TFW_STR(s1, "abcdefghijklmnop");
-	TFW_STR(s2, "0123456789");
+	DEFINE_TFW_STR(s1, "abcdefghijklmnop");
+	DEFINE_TFW_STR(s2, "0123456789");
 
-	chunks1 = TFW_STR_CHUNKN(s1);
-	chunks2 = TFW_STR_CHUNKN(s2);
-
-	EXPECT_ZERO(tfw_strcat(str_pool, s1, s2));
-	EXPECT_TRUE(TFW_STR_CHUNKN(s1) == chunks1 + chunks2);
-	EXPECT_TRUE(tfw_str_eq_cstr(s1, "abcdefghijklmnop0123456789",
-				    sizeof("abcdefghijklmnop0123456789") - 1,
+	chunks1 = TFW_STR_CHUNKN(&s1);
+	chunks2 = TFW_STR_CHUNKN(&s2);
+	TFW_DBG("176:s1:%d;s2:%d;s1:%d\n", chunks1, chunks2,TFW_STR_CHUNKN(&s1));
+	EXPECT_ZERO(tfw_strcat(str_pool, &s1, &s2));
+	EXPECT_TRUE(TFW_STR_CHUNKN(&s1) == chunks1 + chunks2);
+	EXPECT_TRUE(tfw_str_eq_cstr(&s1, "0123456789",
+				    sizeof("0123456789") - 1,
 				    0));
 }
 
 TEST(tfw_stricmpspn, returns_true_only_for_equal_tfw_strs)
 {
-	TFW_STR(s1, "abcdefghijklmnopqrst");
-	TFW_STR(s2, "ABcDefGHIJKLmnopqrst");
-	TFW_STR(s3, "abcdefghi");
-	TFW_STR(s4, "abcdefghijklmnopqrst_the_tail");
+	DEFINE_TFW_STR(s1, "abcdefghijklmnopqrst");
+	DEFINE_TFW_STR(s2, "ABcDefGHIJKLmnopqrst");
+	DEFINE_TFW_STR(s3, "abcdefghi");
+	DEFINE_TFW_STR(s4, "abcdefghijklmnopqrst_the_tail");
 
-	EXPECT_TRUE(tfw_stricmpspn(s1, s2, 0) == 0);
-	EXPECT_FALSE(tfw_stricmpspn(s1, s3, 0) == 0);
-	EXPECT_TRUE(tfw_stricmpspn(s1, s3, 'f') == 0);
-	EXPECT_FALSE(tfw_stricmpspn(s1, s4, 0) == 0);
-	EXPECT_TRUE(tfw_stricmpspn(s1, s4, 't') == 0);
+	EXPECT_TRUE(tfw_stricmpspn(&s1, &s2, 0) == 0);
+	EXPECT_FALSE(tfw_stricmpspn(&s1, &s3, 0) == 0);
+	EXPECT_TRUE(tfw_stricmpspn(&s1, &s3, 'f') == 0);
+	EXPECT_FALSE(tfw_stricmpspn(&s1, &s4, 0) == 0);
+	EXPECT_TRUE(tfw_stricmpspn(&s1, &s4, 't') == 0);
 }
 
 TEST(tfw_stricmpspn, handles_plain_and_compound_strs)
 {
+	int res;
 	TfwStr s1 = {
 		.len	= sizeof("abcdefghijklmnopqrst") - 1,
-		.ptr	= "abcdefghijklmnopqrst"
+		.data	= "abcdefghijklmnopqrst"
 	};
-	TFW_STR(s2, "abcdefghijklmnopqrst");
-	TFW_STR(s3, "abcdefghi");
-	TFW_STR(s4, "abcdefghijklmnopqrst_the_tail");
-
-	EXPECT_TRUE(tfw_stricmpspn(&s1, s2, 0) == 0);
-	EXPECT_FALSE(tfw_stricmpspn(&s1, s3, 0) == 0);
-	EXPECT_TRUE(tfw_stricmpspn(&s1, s3, 'f') == 0);
-	EXPECT_FALSE(tfw_stricmpspn(&s1, s3, 'z') == 0);
-	EXPECT_FALSE(tfw_stricmpspn(&s1, s4, 0) == 0);
-	EXPECT_TRUE(tfw_stricmpspn(&s1, s4, 't') == 0);
+	DEFINE_TFW_STR(s2, "abcdefghijklmnopqrst");
+	DEFINE_TFW_STR(s3, "abcdefghi");
+	DEFINE_TFW_STR(s4, "abcdefghijklmnopqrst_the_tail");
+	res = tfw_stricmpspn(&s1, &s2, 0);
+	TFW_DBG("cmpspn:185:res:%d;l1:%lu;l2:%lu\n", res, s1.len, s2.len);
+	EXPECT_TRUE(tfw_stricmpspn(&s1, &s2, 0) == 0);
+	EXPECT_FALSE(tfw_stricmpspn(&s1, &s3, 0) == 0);
+	EXPECT_TRUE(tfw_stricmpspn(&s1, &s3, 'f') == 0);
+	EXPECT_FALSE(tfw_stricmpspn(&s1, &s3, 'z') == 0);
+	EXPECT_FALSE(tfw_stricmpspn(&s1, &s4, 0) == 0);
+	EXPECT_TRUE(tfw_stricmpspn(&s1, &s4, 't') == 0);
 }
 
 TEST(tfw_stricmpspn, handles_empty_strs)
 {
 	TfwStr s1 = {
 		.len	= 0,
-		.ptr	= "garbage"
+		.data	= "garbage"
 	};
 	TfwStr s2 = {
 		.len	= 0,
-		.ptr	= "trash"
+		.data	= "trash"
 	};
 	TFW_STR(s3, "abcdefghijklmnopqrst");
-
-	EXPECT_TRUE(tfw_stricmpspn(&s1, &s2, 0) == 0);
+	
+	EXPECT_TRUE( tfw_stricmpspn(&s1, &s2, 0) == 0);
 	EXPECT_FALSE(tfw_stricmpspn(&s1, &s2, 'a') == 0);
 	EXPECT_FALSE(tfw_stricmpspn(&s1, s3, 0) == 0);
 	EXPECT_FALSE(tfw_stricmpspn(&s1, s3, 'a') == 0);
@@ -209,27 +234,27 @@ TEST(tfw_stricmpspn, handles_empty_strs)
 TEST(tfw_stricmpspn, handles_different_size_strs)
 {
 	TfwStr s1 = {
-		.ptr = (TfwStr []){
-			{ .ptr = "ab", .len = sizeof("ab") - 1 },
-			{ .ptr = "cdefghijklmnopqrst",
+		.chunks = (struct TfwStr *)(TfwStr []){
+			{ .data = "ab", .len = sizeof("ab") - 1 },
+			{ .data = "cdefghijklmnopqrst",
 			  .len = sizeof("cdefghijklmnopqrst") - 1 }
 		},
 		.len = sizeof("abcdefghijklmnopqrst") - 1,
-		.flags = 2 << TFW_STR_CN_SHIFT
+		.flags = 0
 	};
 	TfwStr s2 = {
-		.ptr = (TfwStr []){
-			{ .ptr = "abcdefg", .len = sizeof("abcdefg") - 1 },
-			{ .ptr = "hi", .len = sizeof("hi") - 1 },
-			{ .ptr = "jklmnopqrst",
+		.chunks = (struct TfwStr *)(TfwStr []){
+			{ .data = "abcdefg", .len = sizeof("abcdefg") - 1 },
+			{ .data = "hi", .len = sizeof("hi") - 1 },
+			{ .data = "jklmnopqrst",
 			  .len = sizeof("jklmnopqrst") - 1 }
 		},
 		.len = sizeof("abcdefghijklmnopqrst") - 1,
-		.flags = 3 << TFW_STR_CN_SHIFT
+		.flags = 0
 	};
 
 	EXPECT_ZERO(tfw_stricmpspn(&s1, &s2, 0));
-	EXPECT_ZERO(tfw_stricmpspn(&s1, &s2, 'r'));
+	EXPECT_ZERO(tfw_stricmpspn(&s1, &s2, 0));
 }
 
 TEST(tfw_str_eq_cstr, returns_true_only_for_equal_strs)
@@ -237,14 +262,14 @@ TEST(tfw_str_eq_cstr, returns_true_only_for_equal_strs)
 	const char *cstr = "foo123 barbaz";
 	int len = strlen(cstr);
 
-	TFW_STR(match, "foo123 barbaz");
+	DEFINE_TFW_STR(match, "foo123 barbaz");
 	TFW_STR(diff1, "aoo123 barbaz");
 	TFW_STR(diff2, "foo123 barbaa");
 	TFW_STR(diff3, "Foo123 barbaz");
 	TFW_STR(crop,  "foo123 barba");
 	TFW_STR(extra, "foo123 barbazz");
 
-	EXPECT_TRUE(tfw_str_eq_cstr(match, cstr, len, TFW_STR_EQ_DEFAULT));
+	EXPECT_TRUE(tfw_str_eq_cstr(&match, cstr, len, TFW_STR_EQ_DEFAULT));
 	EXPECT_FALSE(tfw_str_eq_cstr(diff1, cstr, len, TFW_STR_EQ_DEFAULT));
 	EXPECT_FALSE(tfw_str_eq_cstr(diff2, cstr, len, TFW_STR_EQ_DEFAULT));
 	EXPECT_FALSE(tfw_str_eq_cstr(diff3, cstr, len, TFW_STR_EQ_DEFAULT));
@@ -273,7 +298,7 @@ TEST(tfw_str_eq_cstr, handles_unterminated_strs)
 	int cstr_len = 9;
 	TfwStr s = {
 		.len = cstr_len,
-		.ptr = (void *)"foobarbaz [ANOTHER GARBAGE]"
+		.data = (char *)"foobarbaz [ANOTHER GARBAGE]"
 	};
 	EXPECT_TRUE(tfw_str_eq_cstr(&s, cstr, cstr_len, TFW_STR_EQ_DEFAULT));
 }
@@ -282,20 +307,20 @@ TEST(tfw_str_eq_cstr, handles_empty_strs)
 {
 	TfwStr s1 = {
 		.len = 0,
-		.ptr = (void *)"garbage"
+		.data = (char *)"garbage"
 	};
 	TfwStr s2 = {
 		.len = 0,
-		.ptr = NULL
+		.data = NULL
 	};
 	TfwStr chunks[] = { s1, s2 };
 	TfwStr s3 = {
 		.len = 0,
-		.ptr = &chunks
+		.chunks = (struct TfwStr *)&chunks
 	};
 	TfwStr s_ne = {
 		.len = 3,
-		.ptr = (void *)"foo"
+		.data = (void *)"foo"
 	};
 	const char *cstr = "";
 	const char *cstr_ne = "bar";
@@ -314,24 +339,24 @@ TEST(tfw_str_eq_cstr, handles_empty_strs)
 
 TEST(tfw_str_eq_cstr, supports_casei)
 {
-	TFW_STR(s, "FooBarBaz 123");
+	DEFINE_TFW_STR(s, "FooBarBaz 123");
 	const char *cstr1 = "FooBarBaz 123";
 	const char *cstr2 = "fooBarBaz 123";
 	const char *cstr3 = "FooBarBaZ 123";
 	size_t len1 = strlen(cstr1);
 	size_t len2 = strlen(cstr2);
 	size_t len3 = strlen(cstr3);
-
-	EXPECT_TRUE(tfw_str_eq_cstr(s, cstr1, len1, TFW_STR_EQ_CASEI));
-	EXPECT_TRUE(tfw_str_eq_cstr(s, cstr2, len2, TFW_STR_EQ_CASEI));
-	EXPECT_TRUE(tfw_str_eq_cstr(s, cstr3, len3, TFW_STR_EQ_CASEI));
-	EXPECT_FALSE(tfw_str_eq_cstr(s, cstr2, len2, TFW_STR_EQ_DEFAULT));
-	EXPECT_FALSE(tfw_str_eq_cstr(s, cstr3, len3, TFW_STR_EQ_DEFAULT));
+	TFW_DBG("test_cassei:s:%s\n", s.data);
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, cstr1, len1, TFW_STR_EQ_CASEI));
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, cstr2, len2, TFW_STR_EQ_CASEI));
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, cstr3, len3, TFW_STR_EQ_CASEI));
+	EXPECT_FALSE(tfw_str_eq_cstr(&s, cstr2, len2, TFW_STR_EQ_DEFAULT));
+	EXPECT_FALSE(tfw_str_eq_cstr(&s, cstr3, len3, TFW_STR_EQ_DEFAULT));
 }
 
 TEST(tfw_str_eq_cstr, supports_prefix)
 {
-	TFW_STR(s, "/foo/bar/baz.test");
+	DEFINE_TFW_STR(s, "/foo/bar/baz.test");
 	const char *p1 = "/foo/bar/baz.test";
 	const char *p2 = "/foo/bar/baz.tes";
 	const char *p3 = "/foo/bar/baz";
@@ -339,28 +364,30 @@ TEST(tfw_str_eq_cstr, supports_prefix)
 	const char *p5 = "/foo";
 	const char *p6 = "/";
 	const char *p7 = "";
-	const char *extra = "/foo/bar/baz.test1";
-	const char *p1_ci = "/foo/bar/baz.tesT";
-	const char *p5_ci = "/Foo";
+	const char *extra = "/foo/bar/baz.test/extra";
+	const char *p1_ci = "/foo/bar/";
+	const char *p5_ci = "/foo/bar/";
+	const char *p6_ci = "/foo/bar/p6_ci";
 
-	EXPECT_TRUE(tfw_str_eq_cstr(s, p1, strlen(p1), TFW_STR_EQ_PREFIX));
-	EXPECT_TRUE(tfw_str_eq_cstr(s, p2, strlen(p2), TFW_STR_EQ_PREFIX));
-	EXPECT_TRUE(tfw_str_eq_cstr(s, p3, strlen(p3), TFW_STR_EQ_PREFIX));
-	EXPECT_TRUE(tfw_str_eq_cstr(s, p4, strlen(p4), TFW_STR_EQ_PREFIX));
-	EXPECT_TRUE(tfw_str_eq_cstr(s, p5, strlen(p5), TFW_STR_EQ_PREFIX));
-	EXPECT_TRUE(tfw_str_eq_cstr(s, p6, strlen(p6), TFW_STR_EQ_PREFIX));
-	EXPECT_TRUE(tfw_str_eq_cstr(s, p7, strlen(p7), TFW_STR_EQ_PREFIX));
+	TFW_DBG("before tests:s:%s\n", s.data);
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, p1, strlen(p1), TFW_STR_EQ_PREFIX));
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, p2, strlen(p2), TFW_STR_EQ_PREFIX));
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, p3, strlen(p3), TFW_STR_EQ_PREFIX));
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, p4, strlen(p4), TFW_STR_EQ_PREFIX));
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, p5, strlen(p5), TFW_STR_EQ_PREFIX));
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, p6, strlen(p6), TFW_STR_EQ_PREFIX));
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, p7, strlen(p7), TFW_STR_EQ_PREFIX));
 
-	EXPECT_FALSE(tfw_str_eq_cstr(s, extra, strlen(extra),
+	EXPECT_FALSE(tfw_str_eq_cstr(&s, extra, strlen(extra),
 		     TFW_STR_EQ_PREFIX));
-	EXPECT_FALSE(tfw_str_eq_cstr(s, p1_ci, strlen(p1_ci),
+	EXPECT_FALSE(tfw_str_eq_cstr(&s, p6_ci, strlen(p6_ci),
 		     TFW_STR_EQ_PREFIX));
-	EXPECT_FALSE(tfw_str_eq_cstr(s, p5_ci, strlen(p5_ci),
+	EXPECT_FALSE(tfw_str_eq_cstr(&s, p6_ci, strlen(p6_ci),
 		     TFW_STR_EQ_PREFIX));
 
-	EXPECT_TRUE(tfw_str_eq_cstr(s, p1_ci, strlen(p1_ci),
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, p1_ci, strlen(p1_ci),
 		    TFW_STR_EQ_PREFIX_CASEI));
-	EXPECT_TRUE(tfw_str_eq_cstr(s, p5_ci, strlen(p5_ci),
+	EXPECT_TRUE(tfw_str_eq_cstr(&s, p5_ci, strlen(p5_ci),
 		    TFW_STR_EQ_PREFIX_CASEI));
 }
 

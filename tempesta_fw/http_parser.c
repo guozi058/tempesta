@@ -116,7 +116,7 @@ do {									\
 
 #define __msg_field_fixup(field, pos)					\
 do {									\
-	if (TFW_STR_LAST((TfwStr *)field)->ptr != pos)			\
+	if (TFW_STR_LAST((TfwStr *)field)->data != (char *)pos)		\
 		tfw_http_msg_field_chunk_fixup(msg, field, data,	\
 					       __data_offset(pos));	\
 } while (0)
@@ -357,7 +357,7 @@ __chunk_strncasecmp(TfwStr *chunk, unsigned char *p, size_t len,
 	if (unlikely(tot_len > cn + len)) {
 		if (cn)
 			return CSTR_BADLEN;
-		chunk->ptr = p;
+		chunk->data = p;
 		chunk->len = len;
 		return CSTR_POSTPONE;
 	}
@@ -368,7 +368,7 @@ __chunk_strncasecmp(TfwStr *chunk, unsigned char *p, size_t len,
 	 * Also GLIBC has assembly implementation of the functions, so
 	 * implement our own strcasecmp() if it becomes a bottle neck.
 	 */
-	if ((cn && strncasecmp(chunk->ptr, str, cn))
+	if ((cn && strncasecmp(chunk->data, str, cn))
 	    || strncasecmp(p, str + cn, tot_len - cn))
 		r = CSTR_NEQ;
 
@@ -484,7 +484,7 @@ enum {
 	switch (r) {							\
 	case CSTR_EQ:							\
 		__fsm_sz = chunk->len;					\
-		chunk->ptr = NULL;					\
+		chunk->data = NULL;					\
 		chunk->len = 0;						\
 		lambda;							\
 		__FSM_I_MOVE_n(state, sizeof(str) - 1 - __fsm_sz);	\
@@ -513,7 +513,7 @@ __handle_newline(TfwHttpMsg *msg)
 	TfwHttpParser *parser = &msg->parser;
 	int eolen = 1 + !!((parser->_tmp.eol & 0xff) == 0xda);
 
-	if (parser->hdr.ptr) {
+	if (parser->hdr.data) {
 		tfw_str_set_eolen(&parser->hdr, eolen);
 		return tfw_http_msg_hdr_close(msg, parser->_hdr_tag);
 	}

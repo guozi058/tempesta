@@ -80,7 +80,7 @@ test_mlst_match(void)
 static void
 set_tfw_str(TfwStr *str, const char *cstr)
 {
-	str->ptr = (void *)cstr;
+	str->data = (char *)cstr;
 	str->len = strlen(cstr);
 }
 
