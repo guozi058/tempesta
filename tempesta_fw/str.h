@@ -112,7 +112,7 @@ typedef struct {
 } TfwStr;
 
 #define DEFINE_TFW_STR(name, val) TfwStr name = { .data = (char *)(val), .skb =NULL\
-, .len = sizeof(val) - 1, .chunknum = 1, .flags = 0 }
+, .len = sizeof(val) - 1, .chunknum = 0, .flags = 0 }
 #define TFW_STR_FROM(s)         ((TfwStr){ .data = (char*)s, .skb =NULL,\
  strlen(s)})
 
@@ -135,7 +135,8 @@ typedef struct {
 #define TFW_STR_DUP(s)		((s)->flags & TFW_STR_DUPLICATE)
 
 /* Get @c'th chunk of @s. */
-#define __TFW_STR_CH(s, c)	((TfwStr *)(s)->chunks + (c))
+#define __TFW_STR_CH(s, c)	(( (c) == 0 || TFW_STR_PLAIN((s))) ?	\
+(TfwStr *)(s) : (TfwStr *)(s)->chunks + (c))
 #define TFW_STR_CHUNK(s, c)	(((s)->chunknum)	\
 				 ? ((c) >= TFW_STR_CHUNKN(s)		\
 				    ? NULL				\

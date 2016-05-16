@@ -166,16 +166,39 @@ TEST(tfw_strcat, plain)
 TEST(tfw_strcat, compound)
 {
 	int chunks1, chunks2;
-	DEFINE_TFW_STR(s1, "abcdefghijklmnop");
-	DEFINE_TFW_STR(s2, "0123456789");
+	TfwStr *s1 = make_compound_str2("abc", "defgh");
+	TfwStr *s2 = make_compound_str2("01234", "56789");
+//	DEFINE_TFW_STR(s1, "abcdefghijklmnop");
 
-	chunks1 = TFW_STR_CHUNKN(&s1);
-	chunks2 = TFW_STR_CHUNKN(&s2);
-	TFW_DBG("176:s1:%d;s2:%d;s1:%d\n", chunks1, chunks2,TFW_STR_CHUNKN(&s1));
-	EXPECT_ZERO(tfw_strcat(str_pool, &s1, &s2));
-	EXPECT_TRUE(TFW_STR_CHUNKN(&s1) == chunks1 + chunks2);
-	EXPECT_TRUE(tfw_str_eq_cstr(&s1, "0123456789",
-				    sizeof("0123456789") - 1,
+
+	s1->flags = __TFW_STR_COMPOUND;
+/*		.chunks = (struct TfwStr *)(TfwStr []){
+			{ .data = "abcdefghijklmnop",
+			  .len = sizeof("abcdefghijklmnop") - 1 }
+		},
+		.len = sizeof("abcdefghijklmnop") - 1,
+		.flags = __TFW_STR_COMPOUND, .chunknum = 1
+	};*/
+
+
+	s2->flags = __TFW_STR_COMPOUND;
+/*{
+		.chunks = (struct TfwStr *)(TfwStr []){
+			{ .data = "0123456789",
+			  .len = sizeof("0123456789") - 1 }
+		},
+		.len = sizeof("abcdefghijklmnop") - 1,
+		.flags = __TFW_STR_COMPOUND, .chunknum = 1
+	};*/
+//	DEFINE_TFW_STR(s2, "0123456789");
+
+	chunks1 = TFW_STR_CHUNKN(s1);
+	chunks2 = TFW_STR_CHUNKN(s2);
+	TFW_DBG("196:s1:d:%s;chnks:%d\n", s1->data, s2->chunknum);
+	EXPECT_ZERO(tfw_strcat(str_pool, s1, s2));
+	EXPECT_TRUE(TFW_STR_CHUNKN(s1) == chunks1 + chunks2);
+	EXPECT_TRUE(tfw_str_eq_cstr(s1, "abcdefgh0123456789",
+				    sizeof("abcdefgh0123456789") - 1,
 				    0));
 }
 
@@ -185,11 +208,15 @@ TEST(tfw_stricmpspn, returns_true_only_for_equal_tfw_strs)
 	DEFINE_TFW_STR(s2, "ABcDefGHIJKLmnopqrst");
 	DEFINE_TFW_STR(s3, "abcdefghi");
 	DEFINE_TFW_STR(s4, "abcdefghijklmnopqrst_the_tail");
-
-	EXPECT_TRUE(tfw_stricmpspn(&s1, &s2, 0) == 0);
-	EXPECT_FALSE(tfw_stricmpspn(&s1, &s3, 0) == 0);
+	TFW_DBG("ret_true:start_assert\n");
+	EXPECT_TRUE(tfw_stricmpspn(&s1, &s2, 1) == 0);
+	TFW_DBG("ret_true:first - ok\n");
+	EXPECT_FALSE(tfw_stricmpspn(&s1, &s3, 1) == 0);
+TFW_DBG("ret_true: second - ok\n");
 	EXPECT_TRUE(tfw_stricmpspn(&s1, &s3, 'f') == 0);
+	TFW_DBG("ret_true:third - ok\n");
 	EXPECT_FALSE(tfw_stricmpspn(&s1, &s4, 0) == 0);
+	TFW_DBG("ret_true:fourth - ok\n");
 	EXPECT_TRUE(tfw_stricmpspn(&s1, &s4, 't') == 0);
 }
 

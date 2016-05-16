@@ -505,14 +505,19 @@ TEST(http_parser, fuzzer)
 		for (i = 0; i < N; i++) {
 			TEST_LOG("start field: %d request: %d\n", field, i);
 			ret = fuzz_gen(&context, str, str + len, field, MOVE, FUZZ_REQ);
+			TEST_LOG("fuzz: after gen:%d\n", i);
 			switch (ret) {
 			case FUZZ_VALID:
 				chunks = 1;
+				TEST_LOG("fuzz:beforetry_parse\n");
 				TRY_PARSE_EXPECT_PASS(str, FUZZ_REQ);
+				TEST_LOG("fuzz:after try_parse\n");
 				break;
 			case FUZZ_INVALID:
 				chunks = 1;
+				TEST_LOG("fuzz:before try_parse_block\n");
 				TRY_PARSE_EXPECT_BLOCK(str, FUZZ_REQ);
+				TEST_LOG("fuzz:after try_parse_block\n");
 				break;
 			case FUZZ_END:
 			default:
