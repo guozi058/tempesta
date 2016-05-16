@@ -116,7 +116,7 @@ do {									\
 
 #define __msg_field_fixup(field, pos)					\
 do {									\
-	if (TFW_STR_LAST((TfwStr *)field)->data != (char *)pos)		\
+	if (TFW_STR_LAST((TfwStr *)field)->data != (char *)pos)			\
 		tfw_http_msg_field_chunk_fixup(msg, field, data,	\
 					       __data_offset(pos));	\
 } while (0)
@@ -335,21 +335,24 @@ static const unsigned long hdr_a[] ____cacheline_aligned = {
 #define CSTR_NEQ		TFW_BLOCK	/* -2 */
 #define CSTR_BADLEN		-3
 /**
- * Compare a mixed pair of strings with the string @str of length @str_len where
- * the first string is a part of the header @hdr which is being processed and
- * the second string is yet unhandled data of length @len starting from @p. The
- * @chunk->ptr is used to refer to the start of the first string within the
- * @hdr, while the @chunk->len is used to track gathered length.
+ * Compare two chunks of data with const pattern @str.
+ * If two chunks are less than @tot_len in length and if @chunk is empty,
+ * then store @p in @chunk and postpone the comparison util next piece of data.
  *
  * @return
- * 	CSTR_NEQ:		not equal
- * 	> 0:			(partial) equal
+ * 	CSTR_EQ:		equal
+ * 	CSTR_NEW:		not equal
+ * 	CSTR_POSTPONE:		need to postpone the comparison to next chunk
+ * 	CSTR_BADLEN:		bad length (2 chunks are not enough)
+ *
+ * Beware! The function has side effect unlike standard strncasecmp().
+ * Maybe it's better to rename it...
  */
 static int
-__try_str(TfwStr *hdr, TfwStr* chunk, unsigned char *p, size_t len,
-	  const char *str, size_t str_len)
+__chunk_strncasecmp(TfwStr *chunk, unsigned char *p, size_t len,
+		    const char *str, size_t tot_len)
 {
-	size_t offset = chunk->len;
+	int r = CSTR_EQ, cn = chunk->len;
 
 	if (unlikely(tot_len > cn + len)) {
 		if (cn)
@@ -358,11 +361,6 @@ __try_str(TfwStr *hdr, TfwStr* chunk, unsigned char *p, size_t len,
 		chunk->len = len;
 		return CSTR_POSTPONE;
 	}
-	if (unlikely(offset > str_len ||
-	    (tolower(*p) != tolower(*(str + offset)))))
-		return CSTR_NEQ;
-
-	len = min(len, str_len - offset);
 
 	/*
 	 * TODO kernel has dummy C strcasecmp() implementation which converts
@@ -373,8 +371,8 @@ __try_str(TfwStr *hdr, TfwStr* chunk, unsigned char *p, size_t len,
 	if ((cn && strncasecmp(chunk->data, str, cn))
 	    || strncasecmp(p, str + cn, tot_len - cn))
 		r = CSTR_NEQ;
-	chunk->len += len;
-	return len;
+
+	return r;
 }
 
 /**
@@ -479,10 +477,6 @@ enum {
 	I_EoT, /* end of term */
 };
 
-/* Initialize TRY_STR parsing context */
-#define TRY_STR_INIT()							\
-	TFW_STR_INIT(chunk)
-
 /* Parsing helpers. */
 #define TRY_STR_LAMBDA(str, lambda, state)				\
 	r = __chunk_strncasecmp(chunk, p, __data_remain(p),		\
@@ -495,19 +489,11 @@ enum {
 		lambda;							\
 		__FSM_I_MOVE_n(state, sizeof(str) - 1 - __fsm_sz);	\
 	case CSTR_POSTPONE:						\
-
-	if (!chunk->data)						\
-		chunk->data = p;						\
-	__fsm_n = __try_str(&parser->hdr, chunk, p, __data_remain(p),	\
-			    str, sizeof(str) - 1);			\
-	if (__fsm_n > 0) {						\
-		if (chunk->len == (sizeof(str) - 1)) {			\
-			lambda;						\
-			TRY_STR_INIT();					\
-			__FSM_I_MOVE_n(state, __fsm_n);			\
-		}							\
 		tfw_http_msg_hdr_chunk_fixup(msg, data, len);		\
-		return CSTR_POSTPONE;					\
+	case CSTR_BADLEN:						\
+		return r;						\
+	case CSTR_NEQ: /* fall through */				\
+		;							\
 	}
 
 #define TRY_STR(str, state)						\
@@ -674,10 +660,8 @@ good_looking_eol:							\
 __FSM_STATE(st_curr) {							\
 	BUG_ON(__data_offset(p) > len);					\
 	__fsm_sz = __data_remain(p);					\
-	if (parser->_i_st == I_0) {					\
-		TRY_STR_INIT();						\
+	if (parser->_i_st == I_0)					\
 		parser->_i_st = st_i;					\
-	}								\
 	/*								\
 	 * Check whether the header slot is acquired to catch		\
 	 * duplicate headers in sense of RFC 7230 3.2.2.		\
@@ -717,10 +701,8 @@ __FSM_STATE(st_curr) {							\
 __FSM_STATE(st_curr) {							\
 	BUG_ON(__data_offset(p) > len);					\
 	__fsm_sz = __data_remain(p);					\
-	if (parser->_i_st == I_0) {					\
-		TRY_STR_INIT();						\
+	if (parser->_i_st == I_0)					\
 		parser->_i_st = st_i;					\
-	}								\
 	/* In 'func' the  pointer at the beginning of this piece of the request
 	 * is not available to us. If the request ends in 'func', we can not
 	 * correctly create a new chunk, which includes part of the request
@@ -848,6 +830,8 @@ __FSM_STATE(RGen_Body) {						\
 			return TFW_BLOCK;				\
 		default:						\
 			BUG_ON(__fsm_n < 0);				\
+			if (unlikely(__fsm_n == 0))			\
+				return TFW_BLOCK;			\
 			parser->to_read = parser->_tmp.acc;		\
 			if (!parser->to_read)				\
 				msg->body.flags |= TFW_STR_COMPLETE;	\
@@ -945,7 +929,6 @@ __parse_connection(TfwHttpMsg *hm, unsigned char *data, size_t len)
 				return CSTR_NEQ;
 			msg->flags |= TFW_HTTP_CONN_KA;
 		}, I_EoT);
-		TRY_STR_INIT();
 		__FSM_I_MOVE_n(I_ConnOther, 0);
 	}
 
@@ -1053,7 +1036,6 @@ __parse_transfer_encoding(TfwHttpMsg *hm, unsigned char *data, size_t len)
 		TRY_STR_LAMBDA("chunked", {
 			msg->flags |= TFW_HTTP_CHUNKED;
 		}, I_EoT);
-		TRY_STR_INIT();
 		__FSM_I_MOVE_n(I_TransEncodExt, 0);
 	}
 
@@ -1297,9 +1279,6 @@ enum {
 	Req_I_H_Port,
 	/* Cache-Control header */
 	Req_I_CC,
-	Req_I_CC_m,
-	Req_I_CC_n,
-	Req_I_CC_o,
 	Req_I_CC_MaxAgeV,
 	Req_I_CC_MinFreshV,
 	Req_I_CC_Ext,
@@ -1332,45 +1311,31 @@ __req_parse_cache_control(TfwHttpReq *req, unsigned char *data, size_t len)
 	__FSM_STATE(Req_I_CC) {
 		switch (tolower(c)) {
 		case 'm':
-			__FSM_I_MOVE_n(Req_I_CC_m, 0);
+			TRY_STR("max-age=", Req_I_CC_MaxAgeV);
+			TRY_STR("min-fresh=", Req_I_CC_MinFreshV);
+			TRY_STR_LAMBDA("max-stale", {
+				req->cache_ctl.flags |= TFW_HTTP_CC_MAX_STALE;
+			}, Req_I_CC_EoT);
+			goto cache_extension;
 		case 'n':
-			__FSM_I_MOVE_n(Req_I_CC_n, 0);
+			TRY_STR_LAMBDA("no-cache", {
+				req->cache_ctl.flags |= TFW_HTTP_CC_NO_CACHE;
+			}, Req_I_CC_EoT);
+			TRY_STR_LAMBDA("no-store", {
+				req->cache_ctl.flags |= TFW_HTTP_CC_NO_STORE;
+			}, Req_I_CC_EoT);
+			TRY_STR_LAMBDA("no-transform", {
+				req->cache_ctl.flags |= TFW_HTTP_CC_NO_TRANS;
+			}, Req_I_CC_EoT);
+			goto cache_extension;
 		case 'o':
-			__FSM_I_MOVE_n(Req_I_CC_o, 0);
+			TRY_STR_LAMBDA("only-if-cached", {
+				req->cache_ctl.flags |= TFW_HTTP_CC_NO_OIC;
+			}, Req_I_CC_EoT);
+		default:
+		cache_extension:
+			__FSM_I_MOVE_n(Req_I_CC_Ext, 0);
 		}
-		__FSM_I_MOVE_n(Req_I_CC_Ext, 0);
-	}
-
-	__FSM_STATE(Req_I_CC_m) {
-		TRY_STR("max-age=", Req_I_CC_MaxAgeV);
-		TRY_STR("min-fresh=", Req_I_CC_MinFreshV);
-		TRY_STR_LAMBDA("max-stale", {
-			req->cache_ctl.flags |= TFW_HTTP_CC_MAX_STALE;
-		}, Req_I_CC_EoT);
-		TRY_STR_INIT();
-		__FSM_I_MOVE_n(Req_I_CC_Ext, 0);
-	}
-
-	__FSM_STATE(Req_I_CC_n) {
-		TRY_STR_LAMBDA("no-cache", {
-			req->cache_ctl.flags |= TFW_HTTP_CC_NO_CACHE;
-		}, Req_I_CC_EoT);
-		TRY_STR_LAMBDA("no-store", {
-			req->cache_ctl.flags |= TFW_HTTP_CC_NO_STORE;
-		}, Req_I_CC_EoT);
-		TRY_STR_LAMBDA("no-transform", {
-			req->cache_ctl.flags |= TFW_HTTP_CC_NO_TRANS;
-		}, Req_I_CC_EoT);
-		TRY_STR_INIT();
-		__FSM_I_MOVE_n(Req_I_CC_Ext, 0);
-	}
-
-	__FSM_STATE(Req_I_CC_o) {
-		TRY_STR_LAMBDA("only-if-cached", {
-			req->cache_ctl.flags |= TFW_HTTP_CC_NO_OIC;
-		}, Req_I_CC_EoT);
-		TRY_STR_INIT();
-		__FSM_I_MOVE_n(Req_I_CC_Ext, 0);
 	}
 
 	__FSM_STATE(Req_I_CC_MaxAgeV) {
@@ -2295,10 +2260,6 @@ enum {
 
 	/* Cache-Control header */
 	Resp_I_CC,
-	Resp_I_CC_m,
-	Resp_I_CC_n,
-	Resp_I_CC_p,
-	Resp_I_CC_s,
 	Resp_I_CC_MaxAgeV,
 	Resp_I_CC_SMaxAgeV,
 	/* Expires header */
@@ -2306,10 +2267,6 @@ enum {
 	Resp_I_ExpDate,
 	Resp_I_ExpMonthSP,
 	Resp_I_ExpMonth,
-	Resp_I_ExpMonth_A,
-	Resp_I_ExpMonth_J,
-	Resp_I_ExpMonth_M,
-	Resp_I_ExpMonth_Other,
 	Resp_I_ExpYearSP,
 	Resp_I_ExpYear,
 	Resp_I_ExpHourSP,
@@ -2343,58 +2300,39 @@ __resp_parse_cache_control(TfwHttpResp *resp, unsigned char *data, size_t len)
 	__FSM_STATE(Resp_I_CC) {
 		switch (tolower(c)) {
 		case 'm':
-			__FSM_I_MOVE_n(Resp_I_CC_m, 0);
+			TRY_STR("max-age=", Resp_I_CC_MaxAgeV);
+			TRY_STR_LAMBDA("must-revalidate", {
+				resp->cache_ctl.flags |= TFW_HTTP_CC_MUST_REV;
+			}, Resp_I_EoT);
+			goto cache_extension;
 		case 'n':
-			__FSM_I_MOVE_n(Resp_I_CC_n, 0);
+			TRY_STR_LAMBDA("no-cache", {
+				resp->cache_ctl.flags |= TFW_HTTP_CC_NO_CACHE;
+			}, Resp_I_EoT);
+			TRY_STR_LAMBDA("no-store", {
+				resp->cache_ctl.flags |= TFW_HTTP_CC_NO_STORE;
+			}, Resp_I_EoT);
+			TRY_STR_LAMBDA("no-transform", {
+				resp->cache_ctl.flags |= TFW_HTTP_CC_NO_TRANS;
+			}, Resp_I_EoT);
+			goto cache_extension;
 		case 'p':
-			__FSM_I_MOVE_n(Resp_I_CC_p, 0);
+			TRY_STR_LAMBDA("public", {
+				resp->cache_ctl.flags |= TFW_HTTP_CC_PUBLIC;
+			}, Resp_I_EoT);
+			TRY_STR_LAMBDA("private", {
+				resp->cache_ctl.flags |= TFW_HTTP_CC_PUBLIC;
+			}, Resp_I_EoT);
+			TRY_STR_LAMBDA("proxy-revalidate", {
+				resp->cache_ctl.flags |= TFW_HTTP_CC_PROXY_REV;
+			}, Resp_I_EoT);
+			goto cache_extension;
 		case 's':
-			__FSM_I_MOVE_n(Resp_I_CC_s, 0);
+			TRY_STR("s-maxage=", Resp_I_CC_SMaxAgeV);
+		default:
+		cache_extension:
+			__FSM_I_MOVE_n(Resp_I_Ext, 0);
 		}
-		__FSM_I_MOVE_n(Resp_I_Ext, 0);
-	}
-
-	__FSM_STATE(Resp_I_CC_m) {
-		TRY_STR("max-age=", Resp_I_CC_MaxAgeV);
-		TRY_STR_LAMBDA("must-revalidate", {
-			resp->cache_ctl.flags |= TFW_HTTP_CC_MUST_REV;
-		}, Resp_I_EoT);
-		TRY_STR_INIT();
-		__FSM_I_MOVE_n(Resp_I_Ext, 0);
-	}
-
-	__FSM_STATE(Resp_I_CC_n) {
-		TRY_STR_LAMBDA("no-cache", {
-			resp->cache_ctl.flags |= TFW_HTTP_CC_NO_CACHE;
-		}, Resp_I_EoT);
-		TRY_STR_LAMBDA("no-store", {
-			resp->cache_ctl.flags |= TFW_HTTP_CC_NO_STORE;
-		}, Resp_I_EoT);
-		TRY_STR_LAMBDA("no-transform", {
-			resp->cache_ctl.flags |= TFW_HTTP_CC_NO_TRANS;
-		}, Resp_I_EoT);
-		TRY_STR_INIT();
-		__FSM_I_MOVE_n(Resp_I_Ext, 0);
-	}
-
-	__FSM_STATE(Resp_I_CC_p) {
-		TRY_STR_LAMBDA("public", {
-			resp->cache_ctl.flags |= TFW_HTTP_CC_PUBLIC;
-		}, Resp_I_EoT);
-		TRY_STR_LAMBDA("private", {
-			resp->cache_ctl.flags |= TFW_HTTP_CC_PUBLIC;
-		}, Resp_I_EoT);
-		TRY_STR_LAMBDA("proxy-revalidate", {
-			resp->cache_ctl.flags |= TFW_HTTP_CC_PROXY_REV;
-		}, Resp_I_EoT);
-		TRY_STR_INIT();
-		__FSM_I_MOVE_n(Resp_I_Ext, 0);
-	}
-
-	__FSM_STATE(Resp_I_CC_s) {
-		TRY_STR("s-maxage=", Resp_I_CC_SMaxAgeV);
-		TRY_STR_INIT();
-		__FSM_I_MOVE_n(Resp_I_Ext, 0);
 	}
 
 	__FSM_STATE(Resp_I_CC_MaxAgeV) {
@@ -2551,68 +2489,49 @@ __resp_parse_expires(TfwHttpResp *resp, unsigned char *data, size_t len)
 	__FSM_STATE(Resp_I_ExpMonth) {
 		switch (c) {
 		case 'A':
-			__FSM_I_MOVE_n(Resp_I_ExpMonth_A, 0);
+			TRY_STR_LAMBDA("Apr", {
+				resp->expires += SB_APR;
+			}, Resp_I_ExpYearSP);
+			TRY_STR_LAMBDA("Aug", {
+				resp->expires += SB_AUG;
+			}, Resp_I_ExpYearSP);
+			return CSTR_NEQ;
 		case 'J':
-			__FSM_I_MOVE_n(Resp_I_ExpMonth_J, 0);
+			TRY_STR("Jan", Resp_I_ExpYearSP);
+			TRY_STR_LAMBDA("Jun", {
+				resp->expires += SB_JUN;
+			}, Resp_I_ExpYearSP);
+			TRY_STR_LAMBDA("Jul", {
+				resp->expires += SB_JUL;
+			}, Resp_I_ExpYearSP);
+			return CSTR_NEQ;
 		case 'M':
-			__FSM_I_MOVE_n(Resp_I_ExpMonth_M, 0);
+			TRY_STR_LAMBDA("Mar", {
+				/* Add SEC24H for leap year on year parsing. */
+				resp->expires += SB_MAR;
+			}, Resp_I_ExpYearSP);
+			TRY_STR_LAMBDA("May", {
+				resp->expires += SB_MAY;
+			}, Resp_I_ExpYearSP);
+			return CSTR_NEQ;
+		default:
+			TRY_STR_LAMBDA("Feb", {
+				resp->expires += SB_FEB;
+			}, Resp_I_ExpYearSP);
+			TRY_STR_LAMBDA("Sep", {
+				resp->expires += SB_SEP;
+			}, Resp_I_ExpYearSP);
+			TRY_STR_LAMBDA("Oct", {
+				resp->expires += SB_OCT;
+			}, Resp_I_ExpYearSP);
+			TRY_STR_LAMBDA("Nov", {
+				resp->expires += SB_NOV;
+			}, Resp_I_ExpYearSP);
+			TRY_STR_LAMBDA("Dec", {
+				resp->expires += SB_DEC;
+			}, Resp_I_ExpYearSP);
+			return CSTR_NEQ;
 		}
-		__FSM_I_MOVE_n(Resp_I_ExpMonth_Other, 0);
-	}
-
-	__FSM_STATE(Resp_I_ExpMonth_A) {
-		TRY_STR_LAMBDA("Apr", {
-			resp->expires += SB_APR;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_LAMBDA("Aug", {
-			resp->expires += SB_AUG;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_INIT();
-		return CSTR_NEQ;
-	}
-
-	__FSM_STATE(Resp_I_ExpMonth_J) {
-		TRY_STR("Jan", Resp_I_ExpYearSP);
-		TRY_STR_LAMBDA("Jun", {
-			resp->expires += SB_JUN;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_LAMBDA("Jul", {
-			resp->expires += SB_JUL;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_INIT();
-		return CSTR_NEQ;
-	}
-
-	__FSM_STATE(Resp_I_ExpMonth_M) {
-		TRY_STR_LAMBDA("Mar", {
-			/* Add SEC24H for leap year on year parsing. */
-			resp->expires += SB_MAR;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_LAMBDA("May", {
-			resp->expires += SB_MAY;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_INIT();
-		return CSTR_NEQ;
-	}
-
-	__FSM_STATE(Resp_I_ExpMonth_Other) {
-		TRY_STR_LAMBDA("Feb", {
-			resp->expires += SB_FEB;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_LAMBDA("Sep", {
-			resp->expires += SB_SEP;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_LAMBDA("Oct", {
-			resp->expires += SB_OCT;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_LAMBDA("Nov", {
-			resp->expires += SB_NOV;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_LAMBDA("Dec", {
-			resp->expires += SB_DEC;
-		}, Resp_I_ExpYearSP);
-		TRY_STR_INIT();
-		return CSTR_NEQ;
 	}
 
 	/* Eat SP between Month and Year. */
@@ -2715,9 +2634,12 @@ __resp_parse_keep_alive(TfwHttpResp *resp, unsigned char *data, size_t len)
 	__FSM_START(parser->_i_st) {
 
 	__FSM_STATE(Resp_I_KeepAlive) {
-		TRY_STR("timeout=", Resp_I_KeepAliveTO);
-		TRY_STR_INIT();
-		__FSM_I_MOVE_n(Resp_I_Ext, 0);
+		switch (tolower(c)) {
+		case 't':
+			TRY_STR("timeout=", Resp_I_KeepAliveTO);
+		default:
+			__FSM_I_MOVE_n(Resp_I_Ext, 0);
+		}
 	}
 
 	__FSM_STATE(Resp_I_KeepAliveTO) {

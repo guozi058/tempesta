@@ -384,12 +384,12 @@ tfw_str_eq_cstr_pos(const TfwStr *str, const char *pos, const char *cstr,
 	BUG_ON(!pos || !cstr || !cstr_len);
 
 	TFW_STR_FOR_EACH_CHUNK(c, &tmp, end) {
-		long offset = pos - (char *)c->ptr;
+		long offset = pos - (char *)c->data;
 
 		if (offset >= 0 && (offset < c->len)) {
 			TfwStr t = *c, *v = (TfwStr *)c;
 
-			v->ptr += offset;
+			v->data += offset;
 			v->len -= offset;
 
 			r = tfw_str_eq_cstr(&tmp, cstr, cstr_len, flags);
@@ -399,7 +399,7 @@ tfw_str_eq_cstr_pos(const TfwStr *str, const char *pos, const char *cstr,
 		}
 
 		tmp.len -= c->len;
-		tmp.ptr += sizeof(TfwStr);
+		tmp.data += sizeof(TfwStr);
 
 		TFW_STR_CHUNKN_SUB(&tmp, 1);
 	}

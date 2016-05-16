@@ -428,12 +428,12 @@ TEST(tfw_str_eq_cstr_pos, plain)
 	TFW_STR_FOR_EACH_CHUNK(c, fox, end) {
 		for (i = 0; i < c->len; i++) {
 			EXPECT_TRUE(tfw_str_eq_cstr_pos(fox,
-							c->ptr + i,
+							c->data + i,
 							foxstr + offset,
 							foxlen - offset,
 							TFW_STR_EQ_CASEI));
 			EXPECT_FALSE(tfw_str_eq_cstr_pos(fox,
-							 c->ptr + i,
+							 c->data + i,
 							 "1234567890",
 							 10,
 							 TFW_STR_EQ_CASEI));
@@ -457,12 +457,12 @@ TEST(tfw_str_eq_cstr_pos, compound)
 	TFW_STR_FOR_EACH_CHUNK(c, fox, end) {
 		for (i = 0; i < c->len; i++) {
 			EXPECT_TRUE(tfw_str_eq_cstr_pos(fox,
-							c->ptr + i,
+							c->data + i,
 							foxstr + offset,
 							foxlen - offset,
 							TFW_STR_EQ_CASEI));
 			EXPECT_FALSE(tfw_str_eq_cstr_pos(fox,
-							 c->ptr + i,
+							 c->data + i,
 							 "1234567890",
 							 10,
 							 TFW_STR_EQ_CASEI));
