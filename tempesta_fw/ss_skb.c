@@ -769,7 +769,7 @@ ss_skb_cutoff_data(const TfwStr *hdr, int skip, int tail)
 		skip = 0;
 	}
 
-	BUG_ON(it.ptr == NULL);
+	BUG_ON(it.data == NULL);
 	BUG_ON(it.skb == NULL);
 
 	/* Cut off the tail. */

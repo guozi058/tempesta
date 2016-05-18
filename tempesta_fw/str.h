@@ -135,8 +135,7 @@ typedef struct {
 #define TFW_STR_DUP(s)		((s)->flags & TFW_STR_DUPLICATE)
 
 /* Get @c'th chunk of @s. */
-#define __TFW_STR_CH(s, c)	(( (c) == 0 || TFW_STR_PLAIN((s))) ?	\
-(TfwStr *)(s) : (TfwStr *)(s)->chunks + (c))
+#define __TFW_STR_CH(s, c)	((TfwStr *)(s)->chunks + (c))
 #define TFW_STR_CHUNK(s, c)	(((s)->chunknum)	\
 				 ? ((c) >= TFW_STR_CHUNKN(s)		\
 				    ? NULL				\
