@@ -511,7 +511,7 @@ __handle_newline(TfwHttpMsg *msg)
 	TfwHttpParser *parser = &msg->parser;
 	int eolen = 1 + !!((parser->_tmp.eol & 0xff) == 0xda);
 
-	if (parser->hdr.data) {
+	if (parser->hdr.data || parser->hdr.chunks) {
 		tfw_str_set_eolen(&parser->hdr, eolen);
 		return tfw_http_msg_hdr_close(msg, parser->_hdr_tag);
 	}
