@@ -115,7 +115,7 @@ do_split_and_parse(unsigned char *str, int type)
 	r = split_and_parse_n(str, type, len, chunks);
 	if (++chunks > len)
 		return TFW_STOP;
-
+	TFW_DBG("test(++):chunks:%d;r:%d\n", chunks, r);
 	return r;
 }
 
@@ -267,8 +267,8 @@ TEST(http_parser, fills_hdr_tbl_for_req)
 		"Dummy1: 1\r\n"
 		"Dummy2: 2\r\n"
 		"Dummy3: 3\r\n"
-		"Dummy4: 4\r\n"
-		"Dummy5: 5\r\n"
+		"Dummy4: 4;\r\n"
+		"Dummy5: 5;\r\n"
 		"Dummy6: 6\r\n"
 		"Content-Length: 0\r\n"
 		"Content-Type: text/html; charset=iso-8859-1\r\n"
@@ -565,8 +565,9 @@ TEST(http_parser, empty_host)
 TEST_SUITE(http_parser)
 {
 	TEST_RUN(http_parser, parses_req_method);
-	TEST_RUN(http_parser, parses_req_uri);
 	TEST_RUN(http_parser, fills_hdr_tbl_for_req);
+	TEST_RUN(http_parser, parses_req_uri);
+	
 	TEST_RUN(http_parser, fills_hdr_tbl_for_resp);
 	TEST_RUN(http_parser, blocks_suspicious_x_forwarded_for_hdrs);
 	TEST_RUN(http_parser, parses_connection_value);
