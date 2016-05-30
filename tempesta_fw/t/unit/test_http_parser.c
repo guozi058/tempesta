@@ -261,20 +261,20 @@ TEST(http_parser, fills_hdr_tbl_for_req)
 		"Accept: */*\r\n"
 		"Host: localhost\r\n"
 		"Connection: Keep-Alive\r\n"
-		"X-Custom-Hdr: custom header values\r\n"
-		"X-Forwarded-For: 127.0.0.1, example.com\r\n"
-		"Dummy0: 0\r\n"
-		"Dummy1: 1\r\n"
-		"Dummy2: 2\r\n"
-		"Dummy3: 3\r\n"
+		"X-Custom-Hdr: custom header values;\r\n"
+		"X-Forwarded-For: 127.0.0.1, example.com;\r\n"
+		"Dummy0: 0;\r\n"
+		"Dummy1: 1;\r\n"
+		"Dummy2: 2;\r\n"
+		"Dummy3: 3;\r\n"
 		"Dummy4: 4;\r\n"
 		"Dummy5: 5;\r\n"
 		"Dummy6: 6\r\n"
-		"Content-Length: 0\r\n"
+		"Content-Length: 0;\r\n"
 		"Content-Type: text/html; charset=iso-8859-1\r\n"
-		"Dummy7: 7\r\n"
-		"Dummy8: 8\r\n" /* That is done to check table reallocation. */
-		"Dummy9: 9\r\n"
+		"Dummy7: 7;\r\n"
+		"Dummy8: 8;\r\n" /* That is done to check table reallocation. */
+		"Dummy9: 9;\r\n"
 		"Cache-Control: max-age=0, private, min-fresh=42\r\n"
 		"Transfer-Encoding: compress, deflate, gzip\r\n"
 		"Cookie: session=42; theme=dark\r\n"
@@ -361,20 +361,20 @@ TEST(http_parser, fills_hdr_tbl_for_resp)
 	const char *s_te  = "Transfer-Encoding: compress, deflate, gzip";
 
 	FOR_RESP("HTTP/1.1 200 OK\r\n"
-		"Connection: Keep-Alive\r\n"
-		"Dummy0: 0\r\n"
-		"Dummy1: 1\r\n"
-		"Dummy2: 2\r\n"
-		"Dummy3: 3\r\n"
-		"Dummy4: 4\r\n"
-		"Dummy5: 5\r\n"
-		"Dummy6: 6\r\n"
-		"Content-Length: 0\r\n"
-		"Content-Type: text/html; charset=iso-8859-1\r\n"
-		"Dummy7: 7\r\n"
-		"Dummy8: 8\r\n"
+		"Connection: Keep-Alive;\r\n"
+		"Dummy0: 0;\r\n"
+		"Dummy1: 1;\r\n"
+		"Dummy2: 2;\r\n"
+		"Dummy3: 3;\r\n"
+		"Dummy4: 4;\r\n"
+		"Dummy5: 5;\r\n"
+		"Dummy6: 6;\r\n"
+		"Content-Length: 0;\r\n"
+		"Content-Type: text/html; charset=iso-8859-1;\r\n"
+		"Dummy7: 7;\r\n"
+		"Dummy8: 8;\r\n"
 		"Cache-Control: max-age=0, private, min-fresh=42\r\n"
-		"Dummy9: 9\r\n" /* That is done to check table reallocation. */
+		"Dummy9: 9;\r\n" /* That is done to check table reallocation. */
 		"Expires: Tue, 31 Jan 2012 15:02:53 GMT\r\n"
 		"Keep-Alive: timeout=600, max=65526\r\n"
 		"Transfer-Encoding: compress, deflate, gzip\r\n"
@@ -567,10 +567,9 @@ TEST_SUITE(http_parser)
 	TEST_RUN(http_parser, parses_req_method);
 	TEST_RUN(http_parser, fills_hdr_tbl_for_req);
 	TEST_RUN(http_parser, parses_req_uri);
-	
-	TEST_RUN(http_parser, fills_hdr_tbl_for_resp);
+		TEST_RUN(http_parser, fills_hdr_tbl_for_resp);
 	TEST_RUN(http_parser, blocks_suspicious_x_forwarded_for_hdrs);
-	TEST_RUN(http_parser, parses_connection_value);
+		TEST_RUN(http_parser, parses_connection_value);
 	TEST_RUN(http_parser, content_length_duplicate);
 	TEST_RUN(http_parser, fuzzer);
 	TEST_RUN(http_parser, folding);
