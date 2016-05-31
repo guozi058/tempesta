@@ -550,15 +550,15 @@ TEST(http_parser, folding)
 	EXPECT_BLOCK_REQ("GET / HTTP/1.1\r\n"
 			 "Host:    \r\n"
 			 "   foo.com\r\n"
-			 "Connection: close\r\n"
+			 "Connection: close;\r\n"
 			 "\r\n");
 }
 
 TEST(http_parser, empty_host)
 {
-	FOR_REQ("GET / HTTP/1.1\r\n"
-		"Host:\r\n"
-		"Connection: close\r\n"
+	EXPECT_BLOCK_REQ("GET / HTTP/1.1\r\n"
+		"Host: \r\n"
+		"Connection: close;\r\n"
 		"\r\n");
 }
 
