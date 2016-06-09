@@ -363,7 +363,7 @@ TEST(http_parser, fills_hdr_tbl_for_resp)
 	const char *s_cc  = "Cache-Control: max-age=0, private, min-fresh=42";
 	const char *s_te  = "Transfer-Encoding: compress, deflate, gzip";
 
-	FOR_RESP("HTTP/1.1 200 OK\r\nConnection: Keep-Alive;\r\n\
+	TRY_PARSE_EXPECT_PASS("HTTP/1.1 200 OK\r\nConnection: Keep-Alive;\r\n\
 Dummy0: 0;\r\nDummy1: 1;\r\nDummy2: 2;\r\nDummy3: 3;\r\nDummy4: 4;\r\n\
 Dummy5: 5;\r\nDummy6: 6;\r\nContent-Length: 0;\r\n\
 Content-Type: text/html; charset=iso-8859-1;\r\nDummy7: 7;\r\n\
@@ -372,7 +372,7 @@ Dummy9: 9;\r\nExpires: Tue, 31 Jan 2012 15:02:53 GMT\r\n\
 Keep-Alive: timeout=600, max=65526\r\n\
 Transfer-Encoding: compress, deflate, gzip\r\n\
 Server: Apache/2.4.6 (CentOS) OpenSSL/1.0.1e-fips mod_fcgid/2.3.9\r\n\
-\r\n")
+\r\n", FUZZ_RESP);
 
 		ht = resp->h_tbl;
 
