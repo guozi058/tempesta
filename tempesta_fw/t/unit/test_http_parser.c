@@ -274,14 +274,14 @@ Accept: */*\r\n\
 Host: localhost\r\nConnection: Keep-Alive;\r\n\
 X-Custom-Hdr: custom header values;\r\n\
 X-Forwarded-For: 127.0.0.1, example.com;\r\nDummy0: 0;\r\n\
-Dummy1: 1;\r\nDummy2: 2;\r\nDummy3: 3;\r\nDummy4: 4;\r\nDummy5: 5;\r\n\
-Dummy6: 6\r\nContent-Length: 0;\r\n\
-Content-Type: text/html; charset=iso-8859-1\r\nDummy7: 7;\r\n\
+Dummy1: 1;\r\nDummy2: 2;\r\nDummy3: 3\r\nDummy4: 4\r\nDummy5: 5\r\n\
+Dummy6: 6\r\nContent-Length: 0\r\n\
+Content-Type: text/html; charset=iso-8859-1\r\nDummy7: 7\r\n\
 Dummy8: 8;\r\nDummy9: 9;\r\n\
-Cache-Control: max-age=0, private, min-fresh=42;\r\n\
-Transfer-Encoding: compress, deflate, gzip;\r\n\
-Cookie: session=42; theme=dark;\r\n\r\n", FUZZ_REQ);
-		
+Cache-Control: max-age=0, private, min-fresh=42\r\n\
+Transfer-Encoding: compress, deflate, gzip\r\n\
+Cookie: abcn\r\n", FUZZ_REQ);
+
 		ht = req->h_tbl;
 		TFW_DBG("test:hdrs:ht:%p\n", ht);
 		/* Special headers: */

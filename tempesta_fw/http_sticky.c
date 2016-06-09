@@ -121,7 +121,7 @@ search_cookie(TfwPool *pool, const TfwStr *cookie, TfwStr *val)
 	next = chunk + 1;
 	if (likely(next == end || *(char *)next->data == ';')) {
 		TFW_DBG3("%s: plain cookie value: %.*s\n", __func__,
-			 (int)chunk->len, (char *)chunk->ptr);
+			 (int)chunk->len, (char *)chunk->data);
 		*val = *chunk;
 		return 1;
 	}

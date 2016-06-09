@@ -207,7 +207,7 @@ tfw_http_msg_field_chunk_fixup(TfwHttpMsg *hm, TfwStr *field,
 	BUG_ON(field->flags & TFW_STR_DUPLICATE);
 
 	TFW_DBG3("store field chunk len=%d data=%p field=<%#x,%lu,%p>\n",
-		 len, data, field->flags, field->len, field->ptr);
+		 len, data, field->flags, field->len, field->data);
 
 	/* The header should be open before. */
 	if (unlikely(!field->data))
@@ -323,7 +323,7 @@ done:
 
 	TFW_STR_INIT(&hm->parser.hdr);
 	TFW_DBG3("store header w/ ptr=%p len=%lu flags=%x id=%d\n",
-		 h->ptr, h->len, h->flags, id);
+		 h->data, h->len, h->flags, id);
 
 	/* Move the offset forward if current header is fully read. */
 	if (id == ht->off)
