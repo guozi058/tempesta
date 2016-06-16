@@ -225,6 +225,8 @@ tfw_str_total_len(const TfwStr *s)
 	return s->len + s->eolen;
 }
 
+void tfw_str_fixup_eolen(TfwStr *str);
+
 void tfw_str_del_chunk(TfwStr *str, int id);
 
 TfwStr *tfw_str_add_compound(TfwPool *pool, TfwStr *str);

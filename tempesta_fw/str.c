@@ -506,6 +506,23 @@ tfw_str_to_cstr(const TfwStr *str, char *out_buf, int buf_size)
 }
 EXPORT_SYMBOL(tfw_str_to_cstr);
 
+void
+tfw_str_fixup_eolen(TfwStr *str)
+{
+	const TfwStr *last = TFW_STR_LAST(str);
+	const char *peol = last->ptr + last->len - 2;
+
+	BUG_ON(last->len < 2);
+	BUG_ON(TFW_STR_DUP(str));
+
+	if (peol[0] == '\r' && peol[1] == '\n') {
+		str->len -= 2;
+		str->eolen = 2;
+	} else {
+		TFW_WARN("Can't find string's EOL\n");
+	}
+}
+
 #ifdef DEBUG
 void
 tfw_str_dprint(TfwStr *str, const char *msg)

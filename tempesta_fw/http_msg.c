@@ -402,6 +402,7 @@ __hdr_add(TfwHttpMsg *hm, TfwStr *hdr, int hid)
 
 	if (tfw_strcpy(&it, hdr))
 		return TFW_BLOCK;
+	tfw_str_fixup_eolen(&it);
 
 	/*
 	 * Initialize the header table item by the iterator chunks.
