@@ -59,9 +59,14 @@ tfw_str_del_chunk(TfwStr *str, int id)
 static TfwStr *
 __str_grow_tree(TfwPool *pool, TfwStr *str, unsigned int flag, int n)
 {
+	TfwStr *a = NULL;
+
+	TFW_DBG("str_grow_tree:start:f:%d;f:%d;d:%s;\n", str->flags, flag,
+		str->data);
 	if (str->flags & flag) {
 		unsigned int l;
 		void *p;
+
 
 		if (unlikely(TFW_STR_CHUNKN_LIM(str))) {
 			TFW_WARN("Reaching chunks hard limit\n");
@@ -74,21 +79,24 @@ __str_grow_tree(TfwPool *pool, TfwStr *str, unsigned int flag, int n)
 		if (!p)
 			return NULL;
 		str->chunks = p;
+		TFW_DBG("str_grow_tree:reall:%s\n", str->data);
 		TFW_STR_CHUNKN_ADD(str, n);
 	}
 	else {
-		TfwStr *a = tfw_pool_alloc(pool, (n + 1) * sizeof(TfwStr));
+		a = (TfwStr *)tfw_pool_alloc(pool, (n + 1) * sizeof(TfwStr));
 		if (!a)
 			return NULL;
 		a[0] = *str;
+		TFW_DBG("str_grow_tree:strd:%s\n", a->data);
 		str->chunks = (struct TfwStr *)a;
 		__TFW_STR_CHUNKN_SET(str, n + 1);
 	}
 
 	str = (TfwStr *)str->chunks + TFW_STR_CHUNKN(str) - n;
 	memset(str, 0, sizeof(TfwStr) * n);
+	TFW_DBG("str_grow_tree:aft memset:%s\n", a->data);
 
-	return str;
+	return a;
 }
 
 /**
@@ -110,7 +118,10 @@ tfw_str_add_compound(TfwPool *pool, TfwStr *str)
 TfwStr *
 tfw_str_add_duplicate(TfwPool *pool, TfwStr *str)
 {
-	TfwStr *dup_str = __str_grow_tree(pool, str, TFW_STR_DUPLICATE, 1);
+	TfwStr *dup_str;
+
+	TFW_DBG("str_dup:str:%s\n", str->data);
+	dup_str = __str_grow_tree(pool, str, TFW_STR_DUPLICATE, 1);
 
 	/* Length for set of duplicate strings has no sense. */
 	str->len = 0;
@@ -343,7 +354,7 @@ tfw_str_eq_cstr(const TfwStr *str, const char *cstr, int cstr_len,
 	BUG_ON(str->len && !str->chunks);
 	TFW_STR_FOR_EACH_CHUNK(chunk, str, end) {
 		BUG_ON(chunk->len &&  !chunk->data);
-
+		TFW_DBG("eq_cstr:chl:%lu;sl:%d\n", chunk->len, clen);
 		len = min(clen, (int)chunk->len);
 		if (cmp(cstr, chunk->data, len))
 			return false;
@@ -376,10 +387,13 @@ bool
 tfw_str_eq_cstr_pos(const TfwStr *str, const char *pos, const char *cstr,
 		    int cstr_len, tfw_str_eq_flags_t flags)
 {
+
 	bool r = false;
 	TfwStr tmp = *str;
 	const TfwStr *c, *end;
 
+	TFW_DBG("eq_cstr_pos:sl:%lu;c:%s\n", str->len, cstr);
+	BUG_ON(str->len > 100000);
 	BUG_ON(TFW_STR_DUP(str));
 	BUG_ON(!pos || !cstr || !cstr_len);
 

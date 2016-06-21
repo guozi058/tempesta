@@ -188,6 +188,7 @@ tfw_str_updlen(TfwStr *s, const char *curr_p)
 {
 	unsigned int n;
 
+	TFW_DBG("str_upd_len:start:sl:%lu;sf:%d\n", s->len, s->flags);
 	if (s->flags & __TFW_STR_COMPOUND) {
 		TfwStr *chunk = (TfwStr *)s->chunks + TFW_STR_CHUNKN(s) - 1;
 
@@ -200,6 +201,7 @@ tfw_str_updlen(TfwStr *s, const char *curr_p)
 		n = curr_p - (char *)s->data;
 	}
 	s->len += n;
+TFW_DBG("str_upd_len:end:sl:%lu;len:%u;\n", s->len, n);
 }
 
 /**
